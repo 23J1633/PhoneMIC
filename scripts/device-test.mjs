@@ -1,0 +1,14 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {fileURLToPath} from 'node:url';
+const run = promisify(execFile);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const serial = process.argv[2] || 'R5CY21RK3MJ';
+const args = ['-s', serial, 'shell', 'am', 'instrument', '-w', '-e', 'class', 'com.phonemic.DeviceIntegrationTest', 'com.phonemic.test/androidx.test.runner.AndroidJUnitRunner'];
+const {stdout, stderr} = await run('adb', args, {windowsHide: true, timeout: 240000, maxBuffer: 4 * 1024 * 1024});
+const output = stdout + stderr;
+await fs.writeFile(path.join(root, 'artifacts/device-tests.txt'), output);
+console.log(output);
+if (!/OK \(\d+ tests?\)/.test(output) || /FAILURES|INSTRUMENTATION_FAILED/.test(output)) process.exitCode = 1;

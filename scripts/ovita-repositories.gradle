@@ -1,0 +1,24 @@
+import org.gradle.api.artifacts.repositories.MavenArtifactRepository
+
+// Project-scoped mirrors avoid Maven Central TLS failures on the OVITA network.
+def routeRepository = { repository ->
+    if (repository instanceof MavenArtifactRepository) {
+        def address = repository.url.toString()
+        if (address.contains('repo.maven.apache.org') || address.contains('repo1.maven.org')) {
+            repository.setUrl('https://maven.aliyun.com/repository/central')
+        } else if (address.contains('dl.google.com') || address.contains('maven.google.com')) {
+            repository.setUrl('https://maven.aliyun.com/repository/google')
+        } else if (address.contains('plugins.gradle.org')) {
+            repository.setUrl('https://maven.aliyun.com/repository/gradle-plugin')
+        }
+    }
+}
+gradle.beforeSettings { settings ->
+    settings.pluginManagement.repositories.all(routeRepository)
+    settings.buildscript.repositories.all(routeRepository)
+    settings.dependencyResolutionManagement.repositories.all(routeRepository)
+}
+gradle.beforeProject { project ->
+    project.buildscript.repositories.all(routeRepository)
+    project.repositories.all(routeRepository)
+}
