@@ -35,10 +35,13 @@ type response struct {
 
 type inputTarget struct{ Window, Control uintptr }
 
+var errInputFocusChanged = errors.New("the active input window changed")
+
 type keyboard interface {
 	Capture() (inputTarget, error)
 	Apply(inputTarget, string, string) error
 	Shortcut(inputTarget, keyboardShortcut) error
+	Clear(inputTarget) error
 }
 
 type keyboardShortcut struct {
@@ -111,8 +114,11 @@ func (e *engine) handle(owner string, m message) response {
 	if len(m.Session) < 8 || len(m.Session) > 96 || m.Seq < 1 || m.Seq > 1000000 {
 		return fail("PROTOCOL", "Invalid session")
 	}
-	if m.Type != "begin" && m.Type != "text" && m.Type != "cancel" {
+	if m.Type != "begin" && m.Type != "text" && m.Type != "cancel" && m.Type != "clear" {
 		return fail("PROTOCOL", "Unknown message")
+	}
+	if m.Type == "clear" && (!m.Final || m.Seq != 2 || m.Text != "" || m.Shortcut != nil) {
+		return fail("PROTOCOL", "Clear requires a separate final command")
 	}
 	if len(m.Text) > 60000 || strings.IndexFunc(m.Text, func(r rune) bool {
 		return unicode.IsControl(r) && r != '\n' && r != '\t'
@@ -169,6 +175,20 @@ func (e *engine) handle(owner string, m message) response {
 	}
 	if m.Seq <= s.Seq {
 		// Duplicate delivery only repeats the acknowledgement, never the key events.
+		return r
+	}
+	if m.Type == "clear" {
+		if s.Final || s.Seq != 1 || time.Since(s.Last) > 10*time.Second {
+			return fail("SEQUENCE", "Clear gesture expired; try again")
+		}
+		if err := e.keyboard.Clear(s.Target); err != nil {
+			s.Failed = true
+			if errors.Is(err, errInputFocusChanged) {
+				return fail("FOCUS", err.Error())
+			}
+			return fail("INPUT", err.Error())
+		}
+		s.Seq, s.Final, s.Last = m.Seq, true, time.Now()
 		return r
 	}
 	if s.Final || m.Seq != s.Seq+1 || m.Type != "text" {
@@ -250,4 +270,10 @@ func (k restrictedKeyboard) Shortcut(target inputTarget, shortcut keyboardShortc
 		return errors.New("Input is restricted to the verification window")
 	}
 	return k.inner.Shortcut(target, shortcut)
+}
+func (k restrictedKeyboard) Clear(target inputTarget) error {
+	if target != k.target {
+		return errors.New("Input is restricted to the verification window")
+	}
+	return k.inner.Clear(target)
 }

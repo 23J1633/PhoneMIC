@@ -48,17 +48,17 @@ PhoneMIC 在 Android 手机上运行 Qwen3-ASR-0.6B INT8，把说出的话转换
 
 ## 下载与安装
 
-前往 [最新 Release](https://github.com/23J1633/PhoneMIC/releases/latest)，或直接下载首个公开版本 **v1.0.0**：
+前往 [最新 Release](https://github.com/23J1633/PhoneMIC/releases/latest)，或直接下载 **v1.1.0**：
 
 | 文件 | 平台 | 大小 | 下载 |
 | --- | --- | --- | --- |
-| `PhoneMIC-1.0.0-arm64.apk` | Android 9+，ARM64 | 约 886 MiB，含离线模型 | [Android APK](https://github.com/23J1633/PhoneMIC/releases/download/v1.0.0/PhoneMIC-1.0.0-arm64.apk) |
-| `PhoneMIC-Desktop.exe` | Windows 10 / 11，x64 | 约 7 MiB | [Windows 接收端](https://github.com/23J1633/PhoneMIC/releases/download/v1.0.0/PhoneMIC-Desktop.exe) |
-| `SHA256SUMS.txt` | 下载完整性校验 | — | [SHA-256 校验文件](https://github.com/23J1633/PhoneMIC/releases/download/v1.0.0/SHA256SUMS.txt) |
+| `PhoneMIC-1.1.0-arm64.apk` | Android 9+，ARM64 | 约 886 MiB，含离线模型 | [Android APK](https://github.com/23J1633/PhoneMIC/releases/download/v1.1.0/PhoneMIC-1.1.0-arm64.apk) |
+| `PhoneMIC-Desktop.exe` | Windows 10 / 11，x64 | 约 8 MiB | [Windows 接收端](https://github.com/23J1633/PhoneMIC/releases/download/v1.1.0/PhoneMIC-Desktop.exe) |
+| `SHA256SUMS.txt` | 下载完整性校验 | — | [SHA-256 校验文件](https://github.com/23J1633/PhoneMIC/releases/download/v1.1.0/SHA256SUMS.txt) |
 
 1. **安装手机端**：安装 APK，允许使用麦克风，等待首次本地模型初始化完成。
-2. **启动电脑端**：将 EXE 放在固定目录后双击运行，程序在右下角系统托盘待机，并自动配置随 Windows 启动。若出现防火墙提示，在可信的专用网络允许访问。
-3. **连接电脑**：手机和电脑连到同一局域网，在手机“设置 → 电脑”中点选发现的电脑。首次连接自动记住设备，后续自动重连；找不到时可手动输入电脑局域网 IP。
+2. **启动电脑端**：将 EXE 放在固定目录后双击运行，程序在右下角系统托盘待机，并自动配置随 Windows 启动。新版首次运行会请求管理员权限配置局域网防火墙规则；也可在托盘菜单中查看连接信息或修复局域网连接。
+3. **连接电脑**：手机和电脑连到可互访的局域网，在手机“设置 → 电脑”中点选发现的电脑。首次连接自动记住设备，后续自动重连；找不到时可手动输入电脑 IP 或主机名，支持带端口和 IPv6。VPN、跨子网及访客网络的配置见[连接说明](docs/usage.md#vpn多个网卡与中大型局域网)。
 4. **开始输入**：在电脑上选中目标文本框，点击手机按钮开始说话，再点一次结束。也可以在设置中切换为按住说话。
 
 安装完成后的语音识别无需互联网。局域网模式需要手机与电脑网络互通；仅在可信局域网中完成首次连接。
@@ -69,7 +69,7 @@ PhoneMIC 在 Android 手机上运行 Qwen3-ASR-0.6B INT8，把说出的话转换
 在下载目录中使用 PowerShell：
 
 ```powershell
-Get-FileHash .\PhoneMIC-1.0.0-arm64.apk -Algorithm SHA256
+Get-FileHash .\PhoneMIC-1.1.0-arm64.apk -Algorithm SHA256
 Get-FileHash .\PhoneMIC-Desktop.exe -Algorithm SHA256
 ```
 

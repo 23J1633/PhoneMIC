@@ -63,6 +63,8 @@ export function usePhoneMic() {
   const [recording, setRecording] = useState(false);
   const [openingMic, setOpeningMic] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [clearingInput, setClearingInput] = useState(false);
+  const inputClear = useRef<DictationSession | null>(null);
   const levelRef = useRef(0);
   const [latency, setLatency] = useState<number | null>(null);
   const [notice, setNotice] = useState<TextKey | null>(null);
@@ -103,6 +105,76 @@ export function usePhoneMic() {
     setNotice(key);
     noticeTimer.current = setTimeout(() => setNotice(null), 6500);
   }, []);
+  const cancelInputClear = useCallback(() => {
+    const session = inputClear.current;
+    inputClear.current = null;
+    session?.cancel();
+    setClearingInput(false);
+  }, []);
+  const prepareInputClear = useCallback(() => {
+    if (
+      active.current ||
+      starting.current ||
+      enrollment.current ||
+      savingVoiceProfile.current ||
+      inputClear.current
+    )
+      return false;
+    if (state.current.connection !== 'connected') {
+      showNotice('clearInputDisconnected');
+      return false;
+    }
+    const transport = state.current.settings.transport;
+    const session = new DictationSession(
+      `clear-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 10)}`,
+      false,
+      packet =>
+        transport === 'lan'
+          ? Native.send(JSON.stringify(packet))
+          : Native.sendBluetooth(JSON.stringify(packet)),
+      () => {
+        if (inputClear.current !== session) return;
+        inputClear.current = null;
+        setClearingInput(false);
+        setPreview('');
+        setPreviewVisible(false);
+        clearTimeout(previewTimer.current);
+        showNotice('inputCleared');
+      },
+      (_message, code) => {
+        if (inputClear.current !== session) return;
+        inputClear.current = null;
+        setClearingInput(false);
+        showNotice(
+          code === 'PROTOCOL'
+            ? 'clearInputUnsupported'
+            : code === 'FOCUS'
+            ? 'clearInputFocusChanged'
+            : 'clearInputFailed',
+        );
+      },
+    );
+    inputClear.current = session;
+    session.begin();
+    return true;
+  }, [showNotice]);
+  const clearInput = useCallback(() => {
+    const session = inputClear.current;
+    if (!session) return;
+    if (
+      active.current ||
+      starting.current ||
+      state.current.connection !== 'connected'
+    ) {
+      cancelInputClear();
+      showNotice('clearInputFailed');
+      return;
+    }
+    setClearingInput(true);
+    session.clearInput();
+  }, [cancelInputClear, showNotice]);
   const saveHistory = useCallback(
     (transform: (old: HistoryEntry[]) => HistoryEntry[]) => {
       const next = transform(historyRef.current).slice(0, 200);
@@ -171,6 +243,8 @@ export function usePhoneMic() {
       clearTimeout(previewTimer.current);
       clearTimeout(recordingLimitTimer.current);
       active.current?.session?.dispose();
+      inputClear.current?.cancel();
+      inputClear.current = null;
       if (enrollment.current) enrollment.current.cancelled = true;
       enrollment.current = null;
       Native.cancelSpeech();
@@ -478,7 +552,7 @@ export function usePhoneMic() {
       try {
         if (transport === 'lan' && computer) {
           if (attempts >= 1 && attempts % 3 === 1) {
-            const found = await Native.discover();
+            const found = await Native.discover().catch(() => []);
             if (disposed) {
               return;
             }
@@ -523,6 +597,7 @@ export function usePhoneMic() {
               setLatency(Date.now() - pingNonce);
             }
             active.current?.session?.receive(reply);
+            inputClear.current?.receive(reply);
           } catch {
             /* Ignore malformed replies without disturbing saved text. */
           }
@@ -551,6 +626,7 @@ export function usePhoneMic() {
           event.state === 'disconnected' ||
           event.state === 'unauthorized'
         ) {
+          inputClear.current?.abort('DISCONNECTED');
           clearInterval(heartbeat);
           setLatency(null);
           if (active.current?.session) {
@@ -594,6 +670,7 @@ export function usePhoneMic() {
       } else if (value === 'active') {
         sendPing();
       } else {
+        cancelInputClear();
         if (active.current?.origin !== 'headset') {
           held.current = false;
           if (active.current) active.current.stopping = true;
@@ -607,6 +684,7 @@ export function usePhoneMic() {
     void attempt();
     return () => {
       disposed = true;
+      cancelInputClear();
       clearTimeout(reconnectTimer);
       clearInterval(heartbeat);
       subscription.remove();
@@ -621,11 +699,17 @@ export function usePhoneMic() {
     bluetoothComputer,
     failCurrent,
     showNotice,
+    cancelInputClear,
   ]);
 
   const updateSettings = useCallback(
     (patch: Partial<Settings>) => {
-      if (active.current || starting.current || savingVoiceProfile.current) {
+      if (
+        active.current ||
+        starting.current ||
+        savingVoiceProfile.current ||
+        inputClear.current
+      ) {
         showNotice('alreadyRecording');
         return;
       }
@@ -680,6 +764,7 @@ export function usePhoneMic() {
       if (
         active.current ||
         starting.current ||
+        inputClear.current ||
         enrollment.current ||
         savingVoiceProfile.current ||
         !state.current.modelReady ||
@@ -958,7 +1043,7 @@ export function usePhoneMic() {
   }, [showNotice]);
   const resend = useCallback(
     (entry: HistoryEntry) => {
-      if (active.current || starting.current) {
+      if (active.current || starting.current || inputClear.current) {
         showNotice('alreadyRecording');
         return;
       }
@@ -1016,6 +1101,7 @@ export function usePhoneMic() {
     if (
       active.current ||
       starting.current ||
+      inputClear.current ||
       enrollment.current ||
       savingVoiceProfile.current
     )
@@ -1109,6 +1195,10 @@ export function usePhoneMic() {
     openingMic,
     sending: busy && !recording && !!active.current?.ended,
     busy,
+    clearingInput,
+    prepareInputClear,
+    clearInput,
+    cancelInputClear,
     levelRef,
     notice,
     t,

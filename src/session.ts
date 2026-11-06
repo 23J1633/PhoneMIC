@@ -7,6 +7,7 @@ export class DictationSession {
   private desiredText = '';
   private acceptedText = '';
   private ending = false;
+  private clearing = false;
   private begun = false;
   private dead = false;
   private completed = false;
@@ -16,7 +17,7 @@ export class DictationSession {
     private readonly stream: boolean,
     private readonly send: (packet: Packet) => Promise<unknown>,
     private readonly done: () => void,
-    private readonly failed: (message: string) => void,
+    private readonly failed: (message: string, code?: string) => void,
     private readonly timeoutMs: number | ((packet: Packet) => number) = 6000,
     private shortcut?: KeyboardShortcut,
   ) {}
@@ -30,11 +31,17 @@ export class DictationSession {
     }
   }
   update(text: string, final: boolean) {
-    if (this.dead || this.completed) {
+    if (this.dead || this.completed || this.clearing) {
       return;
     }
     this.desiredText = text;
     this.ending ||= final;
+    this.pump();
+  }
+  clearInput() {
+    if (this.dead || this.completed || this.ending || this.sequence > 1) return;
+    this.clearing = true;
+    this.ending = true;
     this.pump();
   }
   receive(reply: Reply) {
@@ -48,7 +55,7 @@ export class DictationSession {
       return;
     }
     if (reply.type === 'error') {
-      this.abort(reply.message || reply.code || 'Input failed');
+      this.abort(reply.message || reply.code || 'Input failed', reply.code);
       return;
     }
     if (reply.type !== 'ack') {
@@ -78,10 +85,10 @@ export class DictationSession {
       return;
     }
     this.dispatch({
-      type: 'text',
+      type: this.clearing ? 'clear' : 'text',
       session: this.id,
       seq: ++this.sequence,
-      text: this.desiredText,
+      ...(!this.clearing ? { text: this.desiredText } : {}),
       final: this.ending,
       ...(this.ending && this.desiredText.trim() && this.shortcut
         ? { shortcut: this.shortcut }
@@ -99,12 +106,12 @@ export class DictationSession {
       this.abort(String(error?.message || error)),
     );
   }
-  abort(message: string) {
+  abort(message: string, code?: string) {
     if (this.dead || this.completed) {
       return;
     }
     this.cancel();
-    this.failed(message);
+    this.failed(message, code);
   }
   cancel() {
     if (this.dead || this.completed) return;

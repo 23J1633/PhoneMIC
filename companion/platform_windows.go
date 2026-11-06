@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -163,7 +164,7 @@ func (k windowsKeyboard) Shortcut(target inputTarget, shortcut keyboardShortcut)
 	}
 	current, err := k.Capture()
 	if err != nil || current != target {
-		return errors.New("The active text field changed before the shortcut")
+		return fmt.Errorf("%w: the active text field changed before the shortcut", errInputFocusChanged)
 	}
 	var storage [10]winInput
 	events := storage[:0]
@@ -200,6 +201,32 @@ func (k windowsKeyboard) Shortcut(target inputTarget, shortcut keyboardShortcut)
 		return fmt.Errorf("Windows blocked the shortcut (%d/%d): %v", sent, len(events), callErr)
 	}
 	return nil
+}
+func (k windowsKeyboard) Clear(target inputTarget) error {
+	current, err := k.Capture()
+	if err != nil || current.Window != target.Window {
+		return errInputFocusChanged
+	}
+	// UI frameworks may recreate the focused control while the user holds the gesture.
+	// Clear the current control in the armed window, then keep focus stable during selection/deletion.
+	target = current
+	var className [256]uint16
+	user32.NewProc("GetClassNameW").Call(target.Control, uintptr(unsafe.Pointer(&className[0])), uintptr(len(className)))
+	class := strings.ToLower(syscall.UTF16ToString(className[:]))
+	if class == "edit" || strings.HasPrefix(class, "richedit") {
+		// Classic Win32 edit controls do not consistently implement Ctrl+A.
+		var result uintptr
+		ok, _, callErr := user32.NewProc("SendMessageTimeoutW").Call(target.Control, 0x00B1, 0, ^uintptr(0), 0x0002, 500, uintptr(unsafe.Pointer(&result)))
+		if ok == 0 {
+			return fmt.Errorf("Could not select the text field: %v", callErr)
+		}
+	} else {
+		if err := k.Shortcut(target, keyboardShortcut{Key: "A", Modifiers: []string{"Control"}}); err != nil {
+			return err
+		}
+	}
+	// Shortcut checks the captured focus again before deleting the selection.
+	return k.Shortcut(target, keyboardShortcut{Key: "Backspace"})
 }
 func showError(text string) {
 	_, _, _ = user32.NewProc("MessageBoxW").Call(0, uintptr(unsafe.Pointer(wide(text))), uintptr(unsafe.Pointer(wide("PhoneMIC"))), 0x10)
@@ -281,6 +308,8 @@ func runTray(iconFile string, reset func(), quit chan struct{}) {
 			if lparam == 0x205 {
 				menu, _, _ := user32.NewProc("CreatePopupMenu").Call()
 				user32.NewProc("AppendMenuW").Call(menu, 0, 1, uintptr(unsafe.Pointer(wide("重新连接手机"))))
+				user32.NewProc("AppendMenuW").Call(menu, 0, 3, uintptr(unsafe.Pointer(wide("连接信息与诊断"))))
+				user32.NewProc("AppendMenuW").Call(menu, 0, 4, uintptr(unsafe.Pointer(wide("修复局域网连接"))))
 				user32.NewProc("AppendMenuW").Call(menu, 0, 2, uintptr(unsafe.Pointer(wide("退出 PhoneMIC"))))
 				var cursor point
 				user32.NewProc("GetCursorPos").Call(uintptr(unsafe.Pointer(&cursor)))
@@ -289,6 +318,16 @@ func runTray(iconFile string, reset func(), quit chan struct{}) {
 				user32.NewProc("DestroyMenu").Call(menu)
 				if selected == 1 {
 					reset()
+				}
+				if selected == 3 {
+					go showNetworkInfo()
+				}
+				if selected == 4 {
+					go func() {
+						if err := requestFirewall(); err != nil {
+							showError(err.Error())
+						}
+					}()
 				}
 				if selected == 2 {
 					select {
@@ -395,6 +434,16 @@ func platformSelfTest(output string) (err error) {
 	if actual != "你好，PhoneMIC 4090.\r\nEnglish input works." {
 		return errors.New("Unicode input or streaming correction did not match")
 	}
+	if err = k.Clear(target); err != nil {
+		return err
+	}
+	pump()
+	buffer = make([]uint16, 1024)
+	user32.NewProc("GetWindowTextW").Call(child, uintptr(unsafe.Pointer(&buffer[0])), uintptr(len(buffer)))
+	if syscall.UTF16ToString(buffer) != "" {
+		return errors.New("Clear did not remove the entire scratch text field")
+	}
+	result["clearPassed"] = true
 	result["passed"] = true
 	return nil
 }

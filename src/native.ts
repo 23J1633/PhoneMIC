@@ -2,6 +2,7 @@ import { NativeEventEmitter, NativeModules } from 'react-native';
 import type { BluetoothComputer, Computer, VoiceProfile } from './types';
 
 interface PhoneMicModule {
+  readonly appVersion: string;
   prepareSpeech(language: string): Promise<boolean>;
   startSpeech(
     language: string,

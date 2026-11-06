@@ -17,6 +17,21 @@ import type { PhoneMicController } from './usePhoneMic';
 import type { TextKey } from './i18n';
 import { s } from './uiStyles';
 
+function connectionError(failure: unknown, fallback: TextKey): TextKey {
+  switch ((failure as { code?: string })?.code) {
+    case 'LINKED':
+      return 'receiverLinked';
+    case 'ADDRESS':
+      return 'invalidAddress';
+    case 'CERTIFICATE':
+      return 'certificateFailed';
+    case 'UNREACHABLE':
+      return 'lanUnreachable';
+    default:
+      return fallback;
+  }
+}
+
 export function DevicesScreen({
   c,
   p,
@@ -79,11 +94,10 @@ export function DevicesScreen({
     } catch (failure) {
       if (alive.current)
         setError(
-          (failure as { code?: string }).code === 'LINKED'
-            ? 'receiverLinked'
-            : transport === 'lan'
-            ? 'pairFailed'
-            : 'bluetoothFailed',
+          connectionError(
+            failure,
+            transport === 'lan' ? 'pairFailed' : 'bluetoothFailed',
+          ),
         );
     } finally {
       if (alive.current) setConnecting(null);
@@ -91,16 +105,19 @@ export function DevicesScreen({
   };
   const find = async () => {
     if (!host.trim() || scanning) return;
+    const current = ++generation.current;
     Keyboard.dismiss();
     setScanning(true);
     setError(null);
     try {
       const computer = await Native.probe(host.trim());
-      if (alive.current) await connect(computer);
-    } catch {
-      if (alive.current) setError('scanFailed');
+      if (alive.current && current === generation.current)
+        await connect(computer);
+    } catch (failure) {
+      if (alive.current && current === generation.current)
+        setError(connectionError(failure, 'scanFailed'));
     } finally {
-      if (alive.current) setScanning(false);
+      if (alive.current && current === generation.current) setScanning(false);
     }
   };
   const known = transport === 'lan' ? c.computer : c.bluetoothComputer;
@@ -189,6 +206,21 @@ export function DevicesScreen({
           />
         )}
       </View>
+      {transport === 'lan' &&
+        !scanning &&
+        available.length === 0 &&
+        c.connection !== 'connected' && (
+          <Text
+            style={{
+              color: p.secondary,
+              fontSize: 12,
+              lineHeight: 21,
+              marginBottom: 12,
+            }}
+          >
+            {c.t('noComputersHint')}
+          </Text>
+        )}
       {available.map(computer => (
         <Pressable
           key={computer.id}
@@ -226,7 +258,7 @@ export function DevicesScreen({
                 value={host}
                 onChangeText={setHost}
                 accessibilityLabel={c.t('ipPlaceholder')}
-                placeholder="192.168.1.10"
+                placeholder={c.t('ipPlaceholder')}
                 placeholderTextColor={p.faint}
                 autoCapitalize="none"
                 autoCorrect={false}

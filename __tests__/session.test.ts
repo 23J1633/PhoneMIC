@@ -19,6 +19,48 @@ describe('dictation delivery', () => {
       session.receive({ type: 'ack', session: 'session-test', seq });
     return { session, send, done, failed, ack };
   };
+  it('waits for captured focus before clearing, and completes only after its acknowledgement', () => {
+    const { session, send, ack, done } = setup(false);
+    session.begin();
+    session.clearInput();
+    expect(send).toHaveBeenCalledTimes(1);
+    ack(1);
+    expect(send.mock.calls[1][0]).toEqual({
+      type: 'clear',
+      session: 'session-test',
+      seq: 2,
+      final: true,
+    });
+    expect(done).not.toHaveBeenCalled();
+    ack(2);
+    expect(done).toHaveBeenCalledTimes(1);
+    session.clearInput();
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+  it('never clears after a cancelled gesture or a late focus acknowledgement', () => {
+    const { session, send, ack } = setup(false);
+    session.begin();
+    session.clearInput();
+    session.cancel();
+    ack(1);
+    expect(send.mock.calls.map(([packet]) => packet.type)).toEqual([
+      'begin',
+      'cancel',
+    ]);
+  });
+  it('does not repeat a clear whose acknowledgement was lost', () => {
+    const { session, send, ack, failed } = setup(false);
+    session.begin();
+    ack(1);
+    session.clearInput();
+    jest.advanceTimersByTime(6000);
+    ack(2);
+    session.clearInput();
+    expect(failed).toHaveBeenCalledTimes(1);
+    expect(
+      send.mock.calls.filter(([packet]) => packet.type === 'clear'),
+    ).toHaveLength(1);
+  });
   it('coalesces partials and waits for an acknowledgement before sending more', () => {
     const { session, send, ack, done } = setup(true);
     session.begin();
@@ -90,7 +132,7 @@ describe('dictation delivery', () => {
       seq: 2,
       message: 'Focus changed',
     });
-    expect(failed).toHaveBeenCalledWith('Focus changed');
+    expect(failed).toHaveBeenCalledWith('Focus changed', undefined);
     session.update('test more', true);
     expect(send).toHaveBeenCalledTimes(3);
     expect(send.mock.calls[2][0].type).toBe('cancel');

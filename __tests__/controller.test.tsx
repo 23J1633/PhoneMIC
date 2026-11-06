@@ -23,6 +23,7 @@ jest.mock('../src/native', () => {
         'startVoiceprint',
         'setHeadsetControls',
         'connect',
+        'discover',
         'disconnect',
         'disconnectBluetooth',
         'send',
@@ -86,6 +87,7 @@ describe('recording actions and reconnection', () => {
   beforeEach(async () => {
     jest.useFakeTimers();
     jest.clearAllMocks();
+    jest.mocked(Native.discover).mockResolvedValue([]);
     renderCount = 0;
     jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(true);
     jest
@@ -159,6 +161,114 @@ describe('recording actions and reconnection', () => {
     return { promise, resolve, reject };
   };
 
+  it('clears input without opening the microphone and waits for the clear acknowledgement', async () => {
+    await act(async () => {
+      expect(c.prepareInputClear()).toBe(true);
+    });
+    expect(Native.startSpeech).not.toHaveBeenCalled();
+    await act(async () => {
+      acknowledge(packets().at(-1)!);
+    });
+    await act(async () => {
+      c.clearInput();
+    });
+    expect(packets().at(-1)?.type).toBe('clear');
+    expect(c.clearingInput).toBe(true);
+    expect(c.notice).not.toBe('inputCleared');
+    await act(async () => {
+      acknowledge(packets().at(-1)!);
+    });
+    expect(c.clearingInput).toBe(false);
+    expect(c.notice).toBe('inputCleared');
+    expect(c.history).toHaveLength(0);
+  });
+  it('cancels a prepared clear without starting a recording or honoring late acknowledgements', async () => {
+    await act(async () => {
+      c.prepareInputClear();
+      c.press();
+    });
+    expect(Native.startSpeech).not.toHaveBeenCalled();
+    const begin = packets().at(-1)!;
+    await act(async () => {
+      c.cancelInputClear();
+      acknowledge(begin);
+      c.clearInput();
+    });
+    expect(packets().filter(packet => packet.type === 'clear')).toHaveLength(0);
+    expect(c.clearingInput).toBe(false);
+  });
+  it('does not clear after a network handover even if the old focus acknowledgement arrives', async () => {
+    await act(async () => {
+      c.prepareInputClear();
+      c.clearInput();
+    });
+    const begin = packets().at(-1)!;
+    await act(async () => {
+      transport('disconnected');
+      transport('connected');
+      acknowledge(begin);
+    });
+    expect(packets().filter(packet => packet.type === 'clear')).toHaveLength(0);
+    expect(c.clearingInput).toBe(false);
+    expect(c.notice).toBe('clearInputFailed');
+  });
+  it('never repeats a clear with a lost acknowledgement on reconnection', async () => {
+    await act(async () => {
+      c.prepareInputClear();
+    });
+    await act(async () => {
+      acknowledge(packets().at(-1)!);
+      c.clearInput();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(6000);
+      transport('disconnected');
+      transport('connected');
+    });
+    expect(packets().filter(packet => packet.type === 'clear')).toHaveLength(1);
+    expect(c.notice).toBe('clearInputFailed');
+    expect(c.clearingInput).toBe(false);
+  });
+  it('reports an unsupported desktop command without blaming the input focus', async () => {
+    await act(async () => {
+      c.prepareInputClear();
+    });
+    await act(async () => {
+      acknowledge(packets().at(-1)!);
+      c.clearInput();
+    });
+    const packet = packets().at(-1)!;
+    await act(async () => {
+      emit('PhoneMicTransport', {
+        type: 'message',
+        transport: 'lan',
+        data: JSON.stringify({
+          type: 'error',
+          session: packet.session,
+          seq: packet.seq,
+          code: 'PROTOCOL',
+          message: 'Unknown message',
+        }),
+      });
+    });
+    expect(c.notice).toBe('clearInputUnsupported');
+    expect(c.clearingInput).toBe(false);
+  });
+  it('refuses an input clear during dictation or when disconnected', async () => {
+    await start();
+    await act(async () => {
+      expect(c.prepareInputClear()).toBe(false);
+      c.discardRecording();
+    });
+    await act(async () => {
+      transport('disconnected');
+    });
+    await act(async () => {
+      expect(c.prepareInputClear()).toBe(false);
+    });
+    expect(c.notice).toBe('clearInputDisconnected');
+    expect(packets().filter(packet => packet.type === 'clear')).toHaveLength(0);
+  });
   it('cancels a pending permission request without starting enrollment or trapping the page', async () => {
     const permission = deferred<boolean>();
     jest
@@ -505,6 +615,20 @@ describe('recording actions and reconnection', () => {
       acknowledge(packets().at(-1)!);
     });
     expect(c.busy).toBe(false);
+  });
+  it('reconnects to the saved address when network discovery is unavailable', async () => {
+    jest
+      .mocked(Native.discover)
+      .mockRejectedValue(new Error('UDP unavailable'));
+    jest.mocked(Native.connect).mockClear();
+    await act(async () => {
+      transport('disconnected');
+      jest.advanceTimersByTime(400);
+    });
+    expect(Native.discover).toHaveBeenCalled();
+    expect(Native.connect).toHaveBeenCalledWith(
+      expect.stringContaining('192.168.1.2'),
+    );
   });
   it('does not replay text or a shortcut whose acknowledgement was lost', async () => {
     const id = await start();

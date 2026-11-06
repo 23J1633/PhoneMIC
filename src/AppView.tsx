@@ -104,8 +104,33 @@ function Shell() {
           right: 18,
           top: insets.top + 10,
           zIndex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
         }}
       >
+        <View
+          accessible
+          accessibilityRole="image"
+          accessibilityLiveRegion="polite"
+          accessibilityLabel={`${c.t('connect')} · ${c.t(
+            c.connection === 'connected'
+              ? 'connected'
+              : c.connection === 'connecting'
+              ? 'connecting'
+              : 'disconnected',
+          )}`}
+          pointerEvents="none"
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: 3.5,
+            marginRight: 9,
+            backgroundColor:
+              c.connection === 'connected'
+                ? p.connectionOnline
+                : p.connectionOffline,
+          }}
+        />
         <IconButton
           p={p}
           name="settings"
@@ -150,8 +175,12 @@ function Shell() {
             <MicButton
               p={p}
               recording={c.recording}
-              disabled={!c.modelReady || (c.busy && !c.recording)}
-              loading={!c.modelReady || (c.busy && !c.recording)}
+              disabled={
+                !c.modelReady || (c.busy && !c.recording) || c.clearingInput
+              }
+              loading={
+                !c.modelReady || (c.busy && !c.recording) || c.clearingInput
+              }
               label={`${c.t('micAccessibility')} · ${label}`}
               pressIn={c.pressIn}
               pressOut={c.pressOut}
@@ -160,6 +189,10 @@ function Shell() {
               guideLabel={c.t('guideAction')}
               sendLabel={c.t('sendAction')}
               clearLabel={c.t('clearRecording')}
+              clearInputLabel={c.t('clearInput')}
+              prepareInputClear={c.prepareInputClear}
+              clearInput={c.clearInput}
+              cancelInputClear={c.cancelInputClear}
               finishWithAction={c.finishWithAction}
               discardRecording={c.discardRecording}
               haptic={c.gestureHaptic}

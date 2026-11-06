@@ -22,7 +22,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -356,33 +355,6 @@ func (s *receiver) control() http.Handler {
 	})
 }
 
-func localAddresses() []string {
-	var result []string
-	addresses, _ := net.InterfaceAddrs()
-	for _, address := range addresses {
-		if ip, ok := address.(*net.IPNet); ok && !ip.IP.IsLoopback() && !ip.IP.IsLinkLocalUnicast() && ip.IP.To4() != nil {
-			if v4 := ip.IP.To4(); v4[0] == 198 && (v4[1] == 18 || v4[1] == 19) {
-				continue
-			}
-			result = append(result, ip.IP.String())
-		}
-	}
-	rank := func(address string) int {
-		if strings.HasPrefix(address, "192.168.") {
-			return 0
-		}
-		if strings.HasPrefix(address, "10.") {
-			return 1
-		}
-		if net.ParseIP(address).IsPrivate() {
-			return 2
-		}
-		return 3
-	}
-	sort.SliceStable(result, func(i, j int) bool { return rank(result[i]) < rank(result[j]) })
-	return result
-}
-
 func (s *receiver) discover() {
 	conn, err := net.ListenUDP("udp4", &net.UDPAddr{Port: discoveryPort})
 	if err != nil {
@@ -390,6 +362,11 @@ func (s *receiver) discover() {
 		return
 	}
 	defer conn.Close()
+	go func() { <-s.quit; conn.Close() }()
+	s.serveDiscovery(conn)
+}
+
+func (s *receiver) serveDiscovery(conn *net.UDPConn) {
 	buffer := make([]byte, 1024)
 	for {
 		n, remote, readErr := conn.ReadFromUDP(buffer)
@@ -429,7 +406,15 @@ func main() {
 	selfTest := flag.String("self-test", "", "Write native keyboard self-test results")
 	controlFile := flag.String("test-control-file", "", "Enable a private integration-test control endpoint")
 	verificationFile := flag.String("test-window", "", "Restrict integration tests to a scratch window")
+	configureNetwork := flag.Bool("configure-firewall", false, "Configure app-scoped LAN firewall rules and exit")
 	flag.Parse()
+	if *configureNetwork {
+		if err := configureFirewall(); err != nil {
+			showError("PhoneMIC 无法配置防火墙：\n" + err.Error())
+			os.Exit(1)
+		}
+		return
+	}
 	if *selfTest != "" {
 		if platformSelfTest(*selfTest) != nil {
 			os.Exit(1)
@@ -442,13 +427,24 @@ func main() {
 	}
 	s, cert, err := loadReceiver(filepath.Join(dataDir, "PhoneMIC"), newKeyboard())
 	if err != nil {
+		showError("PhoneMIC 无法加载接收端：\n" + err.Error())
 		return
 	}
-	listener, err := tls.Listen("tcp4", fmt.Sprintf(":%d", servicePort), &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
+	if file, logErr := os.OpenFile(filepath.Join(s.dir, "network.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600); logErr == nil {
+		defer file.Close()
+		log.SetOutput(file)
+	}
+	listeners, err := listenLAN(servicePort, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
 	if err != nil {
+		log.Print("Listener unavailable: ", err)
+		showError("PhoneMIC 无法监听连接端口，请检查是否已运行接收端或端口被占用：\n" + err.Error())
 		return
 	}
-	defer listener.Close()
+	defer func() {
+		for _, listener := range listeners {
+			listener.Close()
+		}
+	}()
 	if !s.config.StartupConfigured {
 		if setStartup(true) == nil {
 			s.config.Startup = true
@@ -480,9 +476,18 @@ func main() {
 			_ = (&http.Server{Handler: s.control(), ReadHeaderTimeout: 5 * time.Second}).Serve(controlListener)
 		}()
 	}
-	go func() {
-		_ = (&http.Server{Handler: s.api(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 45 * time.Second, MaxHeaderBytes: 16384}).Serve(listener)
-	}()
+	for _, listener := range listeners {
+		go func(listener net.Listener) {
+			log.Print("Receiver listening on ", listener.Addr(), "; addresses: ", localAddresses())
+			if err := (&http.Server{Handler: s.api(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 45 * time.Second, MaxHeaderBytes: 16384}).Serve(listener); err != nil {
+				log.Print("Receiver stopped: ", err)
+			}
+		}(listener)
+	}
 	go s.discover()
+	go s.advertise()
+	if *verificationFile == "" && *controlFile == "" {
+		go prepareFirewall(s.dir)
+	}
 	runTray(prepareTrayIcon(s.dir), s.resetLinks, s.quit)
 }

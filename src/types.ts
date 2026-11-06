@@ -111,7 +111,7 @@ export interface TransportEvent {
   data?: string;
 }
 export interface Packet {
-  type: 'begin' | 'text' | 'cancel';
+  type: 'begin' | 'text' | 'cancel' | 'clear';
   session: string;
   seq: number;
   text?: string;

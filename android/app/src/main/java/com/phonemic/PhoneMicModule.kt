@@ -47,6 +47,7 @@ class PhoneMicModule(private val context: ReactApplicationContext) : ReactContex
 
     init { context.addLifecycleEventListener(this) }
     override fun getName() = "PhoneMic"
+    override fun getConstants(): Map<String, Any> = mapOf("appVersion" to BuildConfig.VERSION_NAME)
     private fun emit(name: String, event: WritableMap) {
         if (name == "PhoneMicVoice" && event.hasKey("state")) {
             synchronized(recordingState) {

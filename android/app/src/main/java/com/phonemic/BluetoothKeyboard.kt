@@ -182,6 +182,19 @@ class BluetoothKeyboard(private val context: Context, private val emit: (Writabl
                     require(session == id && seq <= sequence + 1) { "Invalid keyboard session" }
                     if (seq > sequence) {
                         require(!finished) { "Keyboard session already completed" }
+                        if (data.getString("type") == "clear") {
+                            require(seq == 2 && sequence == 1 && final && data.optString("text").isEmpty() && !data.has("shortcut")) { "Invalid clear command" }
+                            check(cancelledSession != id) { "Keyboard input cancelled" }
+                            // A partial failure must never cause this destructive command to replay.
+                            finished = true
+                            shortcut(device, JSONObject().put("key", "A").put("modifiers", org.json.JSONArray().put("Control")))
+                            check(cancelledSession != id) { "Keyboard input cancelled" }
+                            press(device, 42)
+                            lastText = ""; sequence = seq
+                            message(JSONObject().put("type", "ack").put("session", id).put("seq", seq).put("final", true))
+                            promise.resolve(true); return@execute
+                        }
+                        require(data.getString("type") == "text") { "Unknown keyboard command" }
                         val text = data.optString("text")
                         val keys = text.map { key(it) }
                         var common = 0

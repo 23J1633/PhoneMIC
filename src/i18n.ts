@@ -6,6 +6,15 @@ const zh = {
   voiceKeyboard: '语音键盘',
   history: '历史记录',
   settings: '设置',
+  checkUpdates: '检查更新',
+  currentVersion: '当前版本',
+  updateChecking: '正在检查…',
+  updateAvailable: '发现新版',
+  updateCurrent: '已是最新版本',
+  updateUnpublished: '暂无已发布版本',
+  updateFailed: '检查失败，点击重试',
+  viewLatestRelease: '前往 GitHub 最新版本',
+  updateOpenFailed: '无法打开版本页面，请检查浏览器或网络。',
   connect: '电脑',
   connected: '已连接',
   connecting: '正在连接',
@@ -37,6 +46,12 @@ const zh = {
   clearConfirm: '清空手机上保存的全部文字记录？',
   cancel: '取消',
   clearRecording: '清空',
+  clearInput: '清空输入框',
+  inputCleared: '已清空电脑输入框。',
+  clearInputDisconnected: '请先连接电脑，再清空输入框。',
+  clearInputFailed: '电脑未能完成清空，请重试。',
+  clearInputUnsupported: '电脑接收端尚不支持清空，请更新电脑端。',
+  clearInputFocusChanged: '电脑窗口或输入焦点发生变化，请重新上滑清空。',
   recordingDiscarded: '已清空，本次内容未发送。',
   confirm: '确定',
   historyEmpty: '暂无记录',
@@ -73,7 +88,8 @@ const zh = {
   voiceprintIncompatible: '声纹资料不兼容，请重新录入。原资料仍保留。',
   voiceprintSaving: '正在保存声纹…',
   voiceprintCancelling: '正在取消录入…',
-  voiceprintTooShort: '有效讲话太短，请在正常、轻声两个阶段都持续说几句话后重试。',
+  voiceprintTooShort:
+    '有效讲话太短，请在正常、轻声两个阶段都持续说几句话后重试。',
   voiceprintInconsistent: '录音中的声音不够一致，请在安静处独自重新录入。',
   voiceprintFailed: '声纹录入未完成，请确认麦克风可用后重试。',
   voiceprintDelete: '删除声纹',
@@ -119,9 +135,9 @@ const zh = {
   computers: '可连接的电脑',
   noComputers: '还没有找到电脑',
   noComputersHint:
-    '确认电脑接收端已开启，并允许访问专用网络。也可以手动填写地址。',
-  manual: '输入 IP',
-  ipPlaceholder: '电脑 IP，例如 192.168.1.10',
+    '可在电脑托盘查看连接地址或修复局域网连接。跨子网时请手动填写 IP 或主机名；使用 VPN 时需允许局域网访问。',
+  manual: '输入 IP 或主机名',
+  ipPlaceholder: 'IP 或主机名，可带 :8765',
   find: '查找',
   remembered: '上次连接',
   forget: '忘记',
@@ -148,7 +164,12 @@ const zh = {
   speechFailed: '无法使用麦克风，请检查录音权限或其他录音应用。',
   pairFailed: '连接失败，请稍后重试。',
   receiverLinked: '电脑已连接其他手机，可在托盘菜单中重置连接。',
-  scanFailed: '查找失败，请确认手机与电脑在同一局域网。',
+  scanFailed: '查找失败，请检查网络连接，或手动输入电脑地址。',
+  invalidAddress: '地址格式不正确，请输入电脑 IP 或主机名，可带端口。',
+  certificateFailed:
+    '电脑证书校验失败，请检查两台设备时间；若重装过接收端，请忘记后重新连接。',
+  lanUnreachable:
+    '无法访问电脑。请在电脑托盘修复局域网连接，并检查 VPN 是否允许局域网访问；跨子网需网络允许 TCP 8765。',
   bluetoothFailed: '请开启蓝牙并授权附近设备权限，再重新连接。',
   storageFailed: '本机存储失败，请检查剩余空间后重试。',
   alreadyRecording: '请先完成当前语音输入。',
@@ -170,7 +191,7 @@ const zh = {
   words: '字',
   waveform: '实时麦克风音量',
   micAccessibility: '语音输入按钮',
-  version: 'PhoneMIC 1.0 · 为专注而生',
+  version: 'PhoneMIC 1.1.0 · 为专注而生',
   focusHint: '请先在电脑上选中输入框，录音期间不要移动光标或使用电脑键盘。',
 };
 const en: Record<keyof typeof zh, string> = {
@@ -179,6 +200,16 @@ const en: Record<keyof typeof zh, string> = {
   voiceKeyboard: 'VOICE KEYBOARD',
   history: 'History',
   settings: 'Settings',
+  checkUpdates: 'Check for updates',
+  currentVersion: 'Current version',
+  updateChecking: 'Checking…',
+  updateAvailable: 'New version',
+  updateCurrent: 'Up to date',
+  updateUnpublished: 'No releases published yet',
+  updateFailed: 'Check failed. Tap to retry',
+  viewLatestRelease: 'View latest release on GitHub',
+  updateOpenFailed:
+    'Could not open the release page. Check your browser or connection.',
   connect: 'Connect a computer',
   connected: 'Connected',
   connecting: 'Connecting',
@@ -211,6 +242,14 @@ const en: Record<keyof typeof zh, string> = {
   clearConfirm: 'Delete all transcripts saved on this phone?',
   cancel: 'Cancel',
   clearRecording: 'Clear',
+  clearInput: 'Clear text field',
+  inputCleared: 'Computer text field cleared.',
+  clearInputDisconnected: 'Connect a computer before clearing its text field.',
+  clearInputFailed: 'The computer could not clear the field. Please try again.',
+  clearInputUnsupported:
+    'Update the desktop receiver to support clearing text fields.',
+  clearInputFocusChanged:
+    'The active window or input focus changed. Swipe up again to clear.',
   recordingDiscarded: 'Cleared. Nothing from this recording was sent.',
   confirm: 'Confirm',
   historyEmpty: 'No history',
@@ -245,7 +284,8 @@ const en: Record<keyof typeof zh, string> = {
   voiceprintMissing: 'Not enrolled',
   voiceFilter: 'My voice filter',
   voiceprintSaved: 'Voiceprint saved. Your voice filter is now enabled.',
-  voiceprintIncompatible: 'This voiceprint is incompatible. Please enroll again. The original is still stored.',
+  voiceprintIncompatible:
+    'This voiceprint is incompatible. Please enroll again. The original is still stored.',
   voiceprintSaving: 'Saving voiceprint…',
   voiceprintCancelling: 'Cancelling enrollment…',
   voiceprintTooShort:
@@ -298,9 +338,9 @@ const en: Record<keyof typeof zh, string> = {
   computers: 'Available computers',
   noComputers: 'No computers found yet',
   noComputersHint:
-    'Check that the receiver is running and allowed on private networks, or enter its address manually.',
+    'View addresses or repair LAN access from the computer tray. Across subnets, enter an IP or hostname. Allow LAN access in your VPN.',
   manual: 'Enter an address',
-  ipPlaceholder: 'Computer IP, e.g. 192.168.1.10',
+  ipPlaceholder: 'IP or hostname, optionally :8765',
   find: 'Find',
   remembered: 'Last connected',
   forget: 'Forget',
@@ -333,7 +373,12 @@ const en: Record<keyof typeof zh, string> = {
   receiverLinked:
     'This computer is linked to another phone. Reset its connection from the tray menu.',
   scanFailed:
-    'Could not find the computer. Check that both devices are on the same local network.',
+    'Search failed. Check the network or enter the computer address manually.',
+  invalidAddress: 'Enter a computer IP or hostname, optionally with a port.',
+  certificateFailed:
+    'Certificate verification failed. Check both device clocks. If the receiver was reinstalled, forget it and reconnect.',
+  lanUnreachable:
+    'Cannot reach the computer. Repair LAN access from its tray menu and allow LAN traffic in your VPN. Routed subnets need TCP 8765 access.',
   bluetoothFailed:
     'Enable Bluetooth, grant Nearby devices access, and reconnect.',
   storageFailed:
@@ -359,7 +404,7 @@ const en: Record<keyof typeof zh, string> = {
   words: 'characters',
   waveform: 'Live microphone level',
   micAccessibility: 'Voice input button',
-  version: 'PhoneMIC 1.0 · Made for focus',
+  version: 'PhoneMIC 1.1.0 · Made for focus',
   focusHint:
     'Select a text field on the computer first. Keep the cursor still and avoid typing while dictating.',
 };

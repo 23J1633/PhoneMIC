@@ -8,6 +8,7 @@ import { ShortcutPicker } from './ShortcutPicker';
 import { formatShortcut } from './shortcuts';
 import { VocabularyEditor } from './VocabularyEditor';
 import { VoiceprintScreen } from './VoiceprintScreen';
+import { UpdateSetting } from './UpdateSetting';
 export function SettingsScreen({
   c,
   p,
@@ -200,6 +201,7 @@ export function SettingsScreen({
       >
         {c.t('headsetHint')}
       </Text>
+      <UpdateSetting c={c} p={p} />
       {editingVoiceprint && (
         <VoiceprintScreen
           c={c}

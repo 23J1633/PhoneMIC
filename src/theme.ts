@@ -15,6 +15,8 @@ const light = {
   buttonEdge: '#E1E1E1',
   buttonOuter: '#F2F2F2',
   danger: '#B86A5E',
+  connectionOnline: '#429568',
+  connectionOffline: '#D35F59',
   shadow: '#2A2A2A',
 };
 const dark: typeof light = {
@@ -32,6 +34,8 @@ const dark: typeof light = {
   buttonEdge: '#3A3A3A',
   buttonOuter: '#222222',
   danger: '#E5A392',
+  connectionOnline: '#6BC291',
+  connectionOffline: '#EF827A',
   shadow: '#000000',
 };
 export type Palette = typeof light;

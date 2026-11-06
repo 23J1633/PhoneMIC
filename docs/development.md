@@ -116,7 +116,7 @@ PowerShell 命令在 `companion/` 目录执行。接收端首次启动会配置�
 ## 真机与输入验证
 
 ```bash
-adb install -r artifacts/PhoneMIC-1.0.0-arm64.apk
+adb install -r artifacts/PhoneMIC-1.1.0-arm64.apk
 adb shell am start -n com.phonemic/.MainActivity
 ```
 

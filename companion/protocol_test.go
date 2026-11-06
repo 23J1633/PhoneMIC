@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeKeyboard struct {
@@ -14,6 +15,16 @@ type fakeKeyboard struct {
 	calls     int
 	changed   bool
 	shortcuts []keyboardShortcut
+	clears    int
+}
+
+func (f *fakeKeyboard) Clear(_ inputTarget) error {
+	if f.changed {
+		return errors.New("focus changed")
+	}
+	f.text = ""
+	f.clears++
+	return nil
 }
 
 func (f *fakeKeyboard) Shortcut(_ inputTarget, s keyboardShortcut) error {
@@ -35,6 +46,51 @@ func (f *fakeKeyboard) Apply(_ inputTarget, old, next string) error {
 	f.calls++
 	return nil
 }
+func TestClearRemovesTheEntireFieldOnce(t *testing.T) {
+	k := &fakeKeyboard{text: "Text that predates this phone session\n已有内容"}
+	e := newEngine(k)
+	e.handle("phone", message{Type: "begin", Session: "clear-field-1", Seq: 1})
+	clear := message{Type: "clear", Session: "clear-field-1", Seq: 2, Final: true}
+	for i := 0; i < 2; i++ {
+		if r := e.handle("phone", clear); r.Type != "ack" || !r.Final {
+			t.Fatal(r)
+		}
+	}
+	if k.text != "" || k.clears != 1 || len(k.shortcuts) != 0 {
+		t.Fatalf("Unexpected clear result: %+v", k)
+	}
+}
+
+func TestClearRequiresFreshCapturedFocusAndAnIndependentSession(t *testing.T) {
+	for _, scenario := range []string{"missing", "cancelled", "expired", "focus-changed", "after-text", "incomplete"} {
+		t.Run(scenario, func(t *testing.T) {
+			k := &fakeKeyboard{text: "Keep this text"}
+			e := newEngine(k)
+			if scenario != "missing" {
+				e.handle("phone", message{Type: "begin", Session: "clear-field-1", Seq: 1})
+			}
+			switch scenario {
+			case "cancelled":
+				e.handle("phone", message{Type: "cancel", Session: "clear-field-1", Seq: 2})
+			case "expired":
+				e.sessions["phone:clear-field-1"].Last = time.Now().Add(-11 * time.Second)
+			case "focus-changed":
+				k.changed = true
+			case "after-text":
+				e.sessions["phone:clear-field-1"].Seq = 2
+			}
+			seq := 2
+			if scenario == "after-text" {
+				seq = 3
+			}
+			r := e.handle("phone", message{Type: "clear", Session: "clear-field-1", Seq: seq, Final: scenario != "incomplete"})
+			if r.Type != "error" || k.text != "Keep this text" || k.clears != 0 {
+				t.Fatalf("Unsafe clear: %+v %+v", r, k)
+			}
+		})
+	}
+}
+
 func TestStreamCorrectionAndDeduplication(t *testing.T) {
 	k := &fakeKeyboard{}
 	e := newEngine(k)

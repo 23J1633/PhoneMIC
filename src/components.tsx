@@ -274,6 +274,10 @@ export const MicButton = React.memo(function MicButton({
   guideLabel,
   sendLabel,
   clearLabel,
+  clearInputLabel,
+  prepareInputClear,
+  clearInput,
+  cancelInputClear,
   finishWithAction,
   discardRecording,
   haptic,
@@ -290,6 +294,10 @@ export const MicButton = React.memo(function MicButton({
   guideLabel: string;
   sendLabel: string;
   clearLabel: string;
+  clearInputLabel: string;
+  prepareInputClear: () => boolean;
+  clearInput: () => void;
+  cancelInputClear: () => void;
   finishWithAction: (action: CompletionAction) => void;
   discardRecording: () => void;
   haptic: () => void;
@@ -300,6 +308,7 @@ export const MicButton = React.memo(function MicButton({
   const [ring] = useState(() => new Animated.Value(0));
   const previousRecording = useRef(recording);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [idleMenu, setIdleMenu] = useState(false);
   const [selected, setSelected] = useState<EndGestureAction | null>(null);
   const touchSurface = useRef<View>(null);
   const origin = useRef({ x: 0, y: 0 });
@@ -310,6 +319,7 @@ export const MicButton = React.memo(function MicButton({
     menu: false,
     moved: false,
     action: null as EndGestureAction | null,
+    idle: false,
   });
   const [guidePoint, setGuidePoint] = useState({ x: 48, y: -24 });
   const [reveal] = useState(() => new Animated.Value(0));
@@ -322,6 +332,9 @@ export const MicButton = React.memo(function MicButton({
     press,
     finishWithAction,
     discardRecording,
+    prepareInputClear,
+    clearInput,
+    cancelInputClear,
     haptic,
   });
   latest.current = {
@@ -333,6 +346,9 @@ export const MicButton = React.memo(function MicButton({
     press,
     finishWithAction,
     discardRecording,
+    prepareInputClear,
+    clearInput,
+    cancelInputClear,
     haptic,
   };
   useEffect(() => {
@@ -386,7 +402,12 @@ export const MicButton = React.memo(function MicButton({
         onStartShouldSetPanResponder: () => !latest.current.disabled,
         onMoveShouldSetPanResponder: () => !latest.current.disabled,
         onPanResponderGrant: event => {
-          gesture.current = { menu: false, moved: false, action: null };
+          gesture.current = {
+            menu: false,
+            moved: false,
+            action: null,
+            idle: !latest.current.recording,
+          };
           origin.current = {
             x: event.nativeEvent.pageX - 48,
             y: event.nativeEvent.pageY - 48,
@@ -398,10 +419,19 @@ export const MicButton = React.memo(function MicButton({
           latest.current.haptic();
           animate(0.97);
           latest.current.pressIn();
-          if (latest.current.recording && latest.current.mode === 'toggle') {
+          if (latest.current.mode === 'toggle') {
             revealTimer.current = setTimeout(() => {
-              if (!latest.current.recording || latest.current.disabled) return;
+              if (
+                latest.current.disabled ||
+                latest.current.recording === gesture.current.idle
+              ) {
+                gesture.current.moved = true;
+                return;
+              }
               gesture.current.menu = true;
+              if (gesture.current.idle && !latest.current.prepareInputClear())
+                return;
+              setIdleMenu(gesture.current.idle);
               setMenuVisible(true);
               latest.current.haptic();
               reveal.setValue(0);
@@ -424,7 +454,9 @@ export const MicButton = React.memo(function MicButton({
           }
           const x = event.nativeEvent.pageX - origin.current.x;
           const y = event.nativeEvent.pageY - origin.current.y;
-          const action = endActionAt(x, y);
+          const target = endActionAt(x, y);
+          const action =
+            gesture.current.idle && target !== 'clear' ? null : target;
           if (action !== gesture.current.action) {
             gesture.current.action = action;
             setSelected(action);
@@ -435,24 +467,40 @@ export const MicButton = React.memo(function MicButton({
             y: Math.max(-115, Math.min(0, y)),
           });
         },
-        onPanResponderRelease: () => {
-          const { menu, action, moved } = gesture.current;
+        onPanResponderRelease: event => {
+          const { menu, moved, idle } = gesture.current;
+          // A final move can be coalesced; use the release position before executing an action.
+          const target = endActionAt(
+            event.nativeEvent.pageX - origin.current.x,
+            event.nativeEvent.pageY - origin.current.y,
+          );
+          const action = idle && target !== 'clear' ? null : target;
           resetGesture();
           latest.current.pressOut();
           if (menu) {
-            if (action === 'clear') latest.current.discardRecording();
+            if (idle) {
+              if (action === 'clear') latest.current.clearInput();
+              else latest.current.cancelInputClear();
+            } else if (action === 'clear') latest.current.discardRecording();
             else if (action) latest.current.finishWithAction(action);
-          } else if (!moved) latest.current.press();
+          } else if (!moved && !latest.current.disabled) latest.current.press();
         },
         onPanResponderTerminationRequest: () => false,
         onPanResponderTerminate: () => {
           resetGesture();
           latest.current.pressOut();
+          if (gesture.current.idle) latest.current.cancelInputClear();
         },
       }),
     [animate, resetGesture, reveal],
   );
-  useEffect(() => () => clearTimeout(revealTimer.current), []);
+  useEffect(
+    () => () => {
+      clearTimeout(revealTimer.current);
+      latest.current.cancelInputClear();
+    },
+    [],
+  );
   return (
     <View
       ref={touchSurface}
@@ -490,57 +538,61 @@ export const MicButton = React.memo(function MicButton({
         </Animated.View>
       )}
       {menuVisible &&
-        endTargets.map(target => (
-          <Animated.View
-            key={target.action}
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              left: target.x - 32,
-              top: target.y - 32,
-              width: 64,
-              height: 64,
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 5,
-              borderRadius: 32,
-              backgroundColor:
-                selected === target.action ? p.accentSoft : p.surface,
-              borderWidth: 1,
-              borderColor: selected === target.action ? p.accent : p.line,
-              boxShadow: p.dark
-                ? '0px 4px 16px rgba(0,0,0,0.3)'
-                : '0px 4px 16px rgba(0,0,0,0.06)',
-              opacity: reveal,
-              transform: [
-                {
-                  scale: reveal.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.85, 1],
-                  }),
-                },
-              ],
-            }}
-          >
-            <Icon
-              name={target.action === 'clear' ? 'trash' : target.action}
-              size={19}
-              color={selected === target.action ? p.accent : p.secondary}
-            />
-            <Text
+        endTargets
+          .filter(target => !idleMenu || target.action === 'clear')
+          .map(target => (
+            <Animated.View
+              key={target.action}
+              pointerEvents="none"
               style={{
-                fontSize: 11,
-                color: selected === target.action ? p.accent : p.secondary,
+                position: 'absolute',
+                left: target.x - 32,
+                top: target.y - 32,
+                width: 64,
+                height: 64,
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                borderRadius: 32,
+                backgroundColor:
+                  selected === target.action ? p.accentSoft : p.surface,
+                borderWidth: 1,
+                borderColor: selected === target.action ? p.accent : p.line,
+                boxShadow: p.dark
+                  ? '0px 4px 16px rgba(0,0,0,0.3)'
+                  : '0px 4px 16px rgba(0,0,0,0.06)',
+                opacity: reveal,
+                transform: [
+                  {
+                    scale: reveal.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.85, 1],
+                    }),
+                  },
+                ],
               }}
             >
-              {target.action === 'send'
-                ? sendLabel
-                : target.action === 'clear'
-                ? clearLabel
-                : guideLabel}
-            </Text>
-          </Animated.View>
-        ))}
+              <Icon
+                name={target.action === 'clear' ? 'trash' : target.action}
+                size={19}
+                color={selected === target.action ? p.accent : p.secondary}
+              />
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: selected === target.action ? p.accent : p.secondary,
+                }}
+              >
+                {target.action === 'send'
+                  ? sendLabel
+                  : target.action === 'clear'
+                  ? idleMenu
+                    ? clearInputLabel
+                    : clearLabel
+                  : guideLabel}
+              </Text>
+            </Animated.View>
+          ))}
       <Animated.View style={{ transform: [{ scale }] }}>
         <View
           {...pan.panHandlers}
@@ -560,14 +612,22 @@ export const MicButton = React.memo(function MicButton({
                   { name: 'send', label: sendLabel },
                   { name: 'clear', label: clearLabel },
                 ]
+              : !recording && mode === 'toggle'
+              ? [{ name: 'clearInput', label: clearInputLabel }]
               : []),
           ]}
           onAccessibilityAction={event => {
             if (disabled) return;
             const action = event.nativeEvent.actionName;
+            if (action === 'clearInput') {
+              if (!recording && mode === 'toggle' && prepareInputClear())
+                clearInput();
+              return;
+            }
             if (recording && action === 'clear') discardRecording();
             else if (recording && (action === 'send' || action === 'guide'))
               finishWithAction(action);
+            else if (action !== 'activate') return;
             else if (mode === 'hold') {
               if (recording) pressOut();
               else pressIn();

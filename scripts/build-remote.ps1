@@ -7,6 +7,8 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 Push-Location -LiteralPath $projectRoot
 try {
+    $appVersion = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+    $apkName = "PhoneMIC-$appVersion-arm64.apk"
     New-Item -ItemType Directory -Force -Path .cache,artifacts,.signing | Out-Null
     & node scripts/fetch-speech.mjs
     if ($LASTEXITCODE -ne 0) { throw 'Speech assets download failed' }
@@ -18,12 +20,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Source upload failed' }
     & ssh -T $HostAlias "cd '$RemoteRoot' && tar -xzf .cache/source.tar.gz && bash scripts/bootstrap-ovita.sh && bash scripts/build-ovita.sh"
     if ($LASTEXITCODE -ne 0) { throw 'Remote build failed' }
-    foreach ($artifactPath in @('artifacts/PhoneMIC-1.0.0-arm64.apk','artifacts/PhoneMIC-Desktop.exe','artifacts/SHA256SUMS.txt','artifacts/models.json','.signing/release.keystore','.signing/key.properties')) {
+    foreach ($artifactPath in @("artifacts/$apkName",'artifacts/PhoneMIC-Desktop.exe','artifacts/SHA256SUMS.txt','artifacts/models.json','.signing/release.keystore','.signing/key.properties')) {
         $localDestination = if ($artifactPath -eq 'artifacts/PhoneMIC-Desktop.exe') { '.cache/PhoneMIC-Desktop.download.exe' } elseif ($artifactPath.StartsWith('.signing/')) { '.signing/' } else { 'artifacts/' }
         & scp -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "${HostAlias}:$RemoteRoot/$artifactPath" $localDestination
         if ($LASTEXITCODE -ne 0) { throw "Artifact download failed: $artifactPath" }
     }
-    foreach ($name in @('PhoneMIC-1.0.0-arm64.apk','PhoneMIC-Desktop.exe')) {
+    foreach ($name in @($apkName,'PhoneMIC-Desktop.exe')) {
         $checksumLine = Get-Content -LiteralPath artifacts/SHA256SUMS.txt | Where-Object { $_.EndsWith("artifacts/$name") }
         $expectedHash = ($checksumLine -split '\s+')[0]
         $downloadPath = if ($name -eq 'PhoneMIC-Desktop.exe') { '.cache/PhoneMIC-Desktop.download.exe' } else { "artifacts/$name" }

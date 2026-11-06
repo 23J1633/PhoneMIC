@@ -8,6 +8,7 @@
 - 3D-Speaker CAM++ 中英文 advanced：Apache-2.0；[源码与许可](https://github.com/modelscope/3D-Speaker)、[模型发布](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models)。约 28.3 MB 权重内置 APK，用于本地声纹录入和匹配。声纹测试使用同一模型发布页的 fangjun／leijun 示例录音，仅包含在测试包中。
 - react-native-svg、react-native-safe-area-context：MIT。
 - Gorilla WebSocket 1.5.3：BSD-2-Clause；[源码与许可](https://github.com/gorilla/websocket)。
+- grandcat/zeroconf 1.0.0：MIT；[源码与许可](https://github.com/grandcat/zeroconf)，用于 Windows 局域网 DNS-SD 服务发现。
 - uniseg 0.4.7：MIT；[源码与许可](https://github.com/rivo/uniseg)。
 
 完整依赖版本与校验信息见 `package-lock.json` 和 `companion/go.sum`。Android 集成测试中的独立中英文 PCM 使用 Windows 系统语音合成生成；自然混合语音来自 [Zipformer Apache-2.0 模型](https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20) 的 `test_wavs/1.wav`（SHA-256：`8bfb42c963e623ebab31b81ff4404867d07d3102507c87ac14577c4c61663b8c`）。测试语音均不打包进正式 APK。
